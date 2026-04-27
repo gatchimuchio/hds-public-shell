@@ -52,6 +52,16 @@ class EthicsPrinciple(str, Enum):
     G5 = "G5_REVERSIBILITY"
 
 
+class SourceTrust(str, Enum):
+    """Trust level for inbound source boundaries."""
+
+    LOCAL = "local"
+    TRUSTED = "trusted"
+    PAIRED = "paired"
+    UNTRUSTED = "untrusted"
+    UNKNOWN = "unknown"
+
+
 class DecisionRequest(BaseModel):
     """決定要求。候補行為・目的・文脈を含む。"""
 
@@ -151,3 +161,5 @@ class HealthResponse(BaseModel):
     service: str
     mode: str
     version: str
+    sealed_scope_enforced: bool = True
+    capabilities: list[str] = Field(default_factory=list)

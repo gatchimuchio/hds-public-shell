@@ -17,6 +17,17 @@ from typing import Any
 
 from .models import AuditEvent
 
+_REDACT_KEYS = {
+    "authorization",
+    "api_key",
+    "apikey",
+    "access_token",
+    "refresh_token",
+    "token",
+    "password",
+    "secret",
+}
+
 
 class AuditLogger:
     """in-memory + optional JSONL ファイル出力の監査ログ"""
@@ -39,7 +50,7 @@ class AuditLogger:
             request_id=request_id,
             phase=phase,
             event_type=event_type,
-            payload=payload,
+            payload=_redact(payload),
         )
         self._events.append(event)
         if self.log_path:
@@ -80,3 +91,18 @@ class AuditLogger:
                     continue
                 events.append(AuditEvent(**json.loads(line)))
         return events
+
+
+def _redact(value: Any) -> Any:
+    if isinstance(value, dict):
+        out: dict[str, Any] = {}
+        for key, item in value.items():
+            key_l = str(key).lower()
+            if key_l in _REDACT_KEYS or key_l.endswith("_key") or key_l.endswith("_secret"):
+                out[str(key)] = "[REDACTED]"
+            else:
+                out[str(key)] = _redact(item)
+        return out
+    if isinstance(value, list):
+        return [_redact(item) for item in value]
+    return value

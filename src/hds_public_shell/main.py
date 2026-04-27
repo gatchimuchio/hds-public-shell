@@ -33,7 +33,30 @@ def create_app() -> FastAPI:
             service="hds-public-shell",
             mode="public-safe-shell",
             version=__version__,
+            sealed_scope_enforced=True,
+            capabilities=[
+                "fmc_loop",
+                "tcp_closure_check",
+                "source_trust_review",
+                "public_safe_tag_inference",
+                "audit_redaction",
+            ],
         )
+
+    @app.get("/readiness")
+    def readiness() -> dict[str, Any]:
+        return {
+            "status": "ready",
+            "service": "hds-public-shell",
+            "mode": "public-safe-shell",
+            "fail_closed_recommended": True,
+            "source_trust_policy": {
+                "missing_external_trust": "SUSPEND",
+                "untrusted": "SUSPEND",
+                "paired": "ASSERT_ELIGIBLE",
+                "trusted": "ASSERT_ELIGIBLE",
+            },
+        }
 
     @app.post("/decision", response_model=DecisionResult)
     def decide(request: DecisionRequest) -> DecisionResult:
@@ -67,6 +90,15 @@ def create_app() -> FastAPI:
                 "HDS-BB detailed implementation",
                 "full decision whitening",
             ],
+            "source_trust": {
+                "local": "eligible for normal policy evaluation",
+                "trusted": "eligible for normal policy evaluation",
+                "paired": "eligible for normal policy evaluation",
+                "untrusted": "SUSPEND for human review",
+                "unknown": "SUSPEND when a source is present",
+            },
+            "prohibited_tags": sorted(policy.PROHIBITED_TAGS),
+            "high_risk_tags": sorted(policy.HIGH_RISK_TAGS),
             "ethics_principles": [e.value for e in EthicsPrinciple],
         }
 

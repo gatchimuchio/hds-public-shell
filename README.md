@@ -30,6 +30,22 @@
 - downstream execution
 - operator UI
 
+## deployment safety
+
+`hds-public-shell` is the upstream control shell. Downstream systems such as
+`blue-tanuki-core` should call `/decision` before local execution and fail
+closed to `SUSPEND` if the shell is unavailable.
+
+Public-safe additions:
+
+- TCP `W=(X,R,M)` closure check.
+- Source trust review: external `source` with missing or `untrusted` trust is
+  `SUSPEND` with human review.
+- Small inspectable tag inference for public tags such as `human_ranking`,
+  `personality_scoring`, `manipulation`, `security`, and `mass_impact`.
+- Audit payload redaction for secret-like keys.
+- `GET /readiness` for deployment checks.
+
 ## quick start
 
 ```bash

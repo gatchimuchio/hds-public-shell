@@ -15,14 +15,16 @@ def _build_request(
     tags: list[str] | None = None,
     user_goal: str = "test goal",
     candidate_action: str = "safe_action",
+    context: dict | None = None,
+    inputs: dict | None = None,
 ) -> DecisionRequest:
     return DecisionRequest(
         user_goal=user_goal,
         candidate_action=candidate_action,
-        context={"domain": "general"},
-        inputs={"problem": "unit test"},
+        context=context or {"domain": "general"},
+        inputs=inputs or {"problem": "unit test"},
         constraints=["no manipulation"],
-        tags=tags or ["engineering"],
+        tags=["engineering"] if tags is None else tags,
         metadata={"scope": "unit-test"},
     )
 
@@ -51,6 +53,47 @@ def test_high_risk_tag_triggers_suspend_with_review():
     result = controller.run(req)
     assert result.output_state == OutputState.SUSPEND
     assert result.requires_human_review is True
+
+
+def test_untrusted_source_triggers_suspend_with_review():
+    controller = HDSUpperController()
+    req = _build_request(
+        context={"source": "discord:alice", "source_trust": "untrusted"},
+    )
+    result = controller.run(req)
+    assert result.output_state == OutputState.SUSPEND
+    assert result.requires_human_review is True
+    assert "UNTRUSTED_SOURCE_REVIEW" in result.commit.ethics_flags
+
+
+def test_unknown_external_source_triggers_suspend():
+    controller = HDSUpperController()
+    req = _build_request(context={"source": "slack:bob"})
+    result = controller.run(req)
+    assert result.output_state == OutputState.SUSPEND
+    assert result.requires_human_review is True
+
+
+def test_paired_source_is_assert_eligible():
+    controller = HDSUpperController()
+    req = _build_request(
+        context={"source": "discord:alice", "source_trust": "paired"},
+    )
+    result = controller.run(req)
+    assert result.output_state == OutputState.ASSERT
+    assert result.frame.world.x["source_trust"] == "paired"
+
+
+def test_public_safe_tag_inference_catches_human_ranking():
+    controller = HDSUpperController()
+    req = _build_request(
+        tags=[],
+        user_goal="rank employees by personality score",
+        candidate_action="produce ranking",
+    )
+    result = controller.run(req)
+    assert result.output_state == OutputState.OUT_OF_SCOPE
+    assert any("human ranking" in reason for reason in result.commit.stop_reasons)
 
 
 def test_ego_design_tag_is_rejected():
@@ -89,6 +132,19 @@ def test_audit_trail_records_fmc_phases():
     assert "COMMIT_DRAFTED" in event_types
     assert "DECISION_COMPLETED" in event_types
     assert result.audit_id
+
+
+def test_audit_redacts_secret_payloads():
+    audit = AuditLogger()
+    audit.log(
+        request_id="req_secret",
+        phase="SYSTEM",
+        event_type="SECRET_TEST",
+        payload={"inputs": {"api_key": "sk-test", "nested": {"password": "pw"}}},
+    )
+    event = audit.get_by_request_id("req_secret")[0]
+    assert event.payload["inputs"]["api_key"] == "[REDACTED]"
+    assert event.payload["inputs"]["nested"]["password"] == "[REDACTED]"
 
 
 def test_policy_closure_check_suspends_on_empty_world():

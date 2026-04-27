@@ -145,23 +145,30 @@ class HDSUpperController:
             EthicsPrinciple.G5.value,
             *request.constraints,
         ]))
+        source, source_trust = self.ethics_policy.source_info(request)
+        inferred_tags = self.ethics_policy.collect_tags(request)
 
         world = WorldModel(
             x={
                 "request_id": request.request_id,
                 "candidate_action": request.candidate_action,
                 "scope": request.metadata.get("scope", "unspecified"),
+                "source": source,
+                "source_trust": source_trust,
             },
             r={
                 "goal": request.user_goal,
                 "context_keys": list(request.context.keys()),
                 "input_keys": list(request.inputs.keys()),
+                "tags": inferred_tags,
             },
             m={
                 "stop_rule_enabled": True,
                 "log_required": True,
                 "public_safe_only": True,
                 "no_reproducible_core_recipe": True,
+                "source_trust_required_for_external_input": True,
+                "tag_inference": "public_safe_rules_only",
             },
         )
 
@@ -206,11 +213,13 @@ class HDSUpperController:
                 "goal": request.user_goal,
                 "candidate": request.candidate_action,
                 "constraints": request.constraints,
+                "tags": self.ethics_policy.collect_tags(request),
             },
             structure={
                 "axes": ["value", "risk", "goal"],
                 "phases": ["F", "M", "C"],
                 "note": "公開骨格では内部評価器を固定しない",
+                "source_trust": self.ethics_policy.source_info(request)[1],
             },
             value_estimate={
                 "status": "placeholder",
